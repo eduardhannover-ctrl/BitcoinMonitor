@@ -35,32 +35,22 @@ def get_candles(granularity):
 # ============================================================
 
 app = Dash(__name__)
+server = app.server   # ← OBLIGATORIO PARA HUGGING FACE (GUNICORN)
+
 app.title = "Bitcoin Monitor"
 
 app.layout = html.Div([
 
     html.H1("Bitcoin Monitor en Tiempo Real", style={"textAlign": "center"}),
 
-    # Guarda el offset de la gráfica de 5 minutos
     dcc.Store(id="offset_5m", data=0),
 
-    # Botón para refrescar todo
     html.Button("Refrescar Datos", id="refresh_btn", n_clicks=0,
                 style={"margin": "20px", "padding": "10px", "fontSize": "18px"}),
 
-    # ============================
-    # GRÁFICA 1 — 1 AÑO
-    # ============================
     dcc.Graph(id="fig_1y"),
-
-    # ============================
-    # GRÁFICA 2 — 24 HORAS
-    # ============================
     dcc.Graph(id="fig_24h"),
 
-    # ============================
-    # GRÁFICA 3 Y 4 EN COLUMNAS
-    # ============================
     html.Div([
         html.Div([
             dcc.Graph(id="fig_1h")
@@ -115,7 +105,7 @@ def update_offset(minus_clicks, plus_clicks, refresh_clicks, offset):
     elif trigger == "plus_btn":
         return offset + 1
     elif trigger == "refresh_btn":
-        return 0  # reset offset
+        return 0
 
     return offset
 
@@ -135,9 +125,6 @@ def update_offset(minus_clicks, plus_clicks, refresh_clicks, offset):
 )
 def update_all(n, offset):
 
-    # --------------------------
-    # 1 AÑO (granularity = 1 día)
-    # --------------------------
     df_1y = get_candles(86400)
     fig1 = go.Figure()
     if df_1y is not None:
@@ -150,9 +137,6 @@ def update_all(n, offset):
         ))
     fig1.update_layout(title="Histórico de precios de 1 Año", template="plotly_dark", height=400)
 
-    # --------------------------
-    # 24 HORAS (granularity = 1 min)
-    # --------------------------
     df_24h = get_candles(60)
     fig2 = go.Figure()
     if df_24h is not None:
@@ -166,9 +150,6 @@ def update_all(n, offset):
         ))
     fig2.update_layout(title="Histórico de precios de 24 horas", template="plotly_dark", height=400)
 
-    # --------------------------
-    # 1 HORA (granularity = 1 min)
-    # --------------------------
     fig3 = go.Figure()
     if df_24h is not None:
         df_1h = df_24h.tail(60)
@@ -181,28 +162,19 @@ def update_all(n, offset):
         ))
     fig3.update_layout(title="Histórico de precios de 1 hora", template="plotly_dark", height=400)
 
-    # --------------------------
-    # 5 MINUTOS + OFFSET (solo mueve el límite izquierdo)
-    # --------------------------
     fig4 = go.Figure()
     indicator_text = ""
 
     if df_24h is not None:
 
-        # Último timestamp disponible
         end_real = df_24h["time"].max()
-
-        # Ventana base de 5 minutos
         start_base = end_real - pd.Timedelta(minutes=5)
 
-        # Aplicar offset SOLO al inicio
         start_time = start_base + pd.Timedelta(minutes=offset)
         end_time   = start_time + pd.Timedelta(minutes=5)
 
-        # Filtrar datos dentro de la ventana desplazada
         df_5m = df_24h[(df_24h["time"] >= start_time) & (df_24h["time"] <= end_time)]
 
-        # Dibujar velas
         fig4.add_trace(go.Candlestick(
             x=df_5m["time"],
             open=df_5m["open"],
@@ -211,17 +183,10 @@ def update_all(n, offset):
             close=df_5m["close"]
         ))
 
-        # ============================================================
-        # INDICADORES (EMA3, EMA15, RSI) — usando últimos 15 minutos
-        # ============================================================
-
         if len(df_24h) >= 15:
 
             df_15m = df_24h.tail(15).copy()
 
-            # --------------------------
-            # EMA 3 y EMA 15
-            # --------------------------
             df_15m["EMA3"] = df_15m["close"].ewm(span=3).mean()
             df_15m["EMA15"] = df_15m["close"].ewm(span=15).mean()
 
@@ -235,9 +200,6 @@ def update_all(n, offset):
             else:
                 ema_signal = "EMA3 = EMA15 → Momentum NEUTRO"
 
-            # --------------------------
-            # RSI 15m
-            # --------------------------
             delta = df_15m["close"].diff()
             gain = delta.clip(lower=0)
             loss = -delta.clip(upper=0)
@@ -274,4 +236,4 @@ def update_all(n, offset):
 # ============================================================
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run_server(host="0.0.0.0", port=7860, debug=False)
