@@ -273,5 +273,6 @@ def update_all(n, offset):
 # EJECUTAR SERVIDOR
 # ============================================================
 
+
 if __name__ == "__main__":
     app.run(debug=False)
